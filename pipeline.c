@@ -291,29 +291,17 @@ void cycle_pipeline(regfile_t* regfile_p, Byte* memory_p, Cache* cache_p, pipeli
   detect_hazard(pregs_p, pwires_p, regfile_p);
 
   if (pwires_p->stall) {
-    printf("[DEBUG STALL]: Stall detected, PC=0x%08x\n", regfile_p->PC);
-    printf("[DEBUG STALL]: IFID.out instruction: [%08x]@[%08x]\n",
-           pregs_p->ifid_preg.out.instr.bits, pregs_p->ifid_preg.out.instr_addr);
-    printf("[DEBUG STALL]: IDEX.out instruction: [%08x]@[%08x]\n",
-           pregs_p->idex_preg.out.instr.bits, pregs_p->idex_preg.out.instr_addr);
-
     pregs_p->ifid_preg.inp = pregs_p->ifid_preg.out;
     pregs_p->idex_preg.inp = (idex_reg_t){
-      .instr = { .opcode = 0x13 }, // addi
+      .instr = { .opcode = 0x13 },
       .instr.bits = 0x00000013,
       .instr_addr = pregs_p->ifid_preg.out.instr_addr
     };
-
-    // During stall, insert NOP into EXMEM
-    pregs_p->exmem_preg.inp = (exmem_reg_t){
-      .instr.bits = 0x00000013,
-      .instr_addr = regfile_p->PC - 8
-    };
+    // Don't call gen_forward during stalls - no forwarding needed for NOPs
+    pregs_p->exmem_preg.inp = stage_execute(pregs_p->idex_preg.out, pwires_p);
   } else {
     pregs_p->ifid_preg.inp = stage_fetch(pwires_p, regfile_p, memory_p);
     pregs_p->idex_preg.inp = stage_decode(pregs_p->ifid_preg.out, pwires_p, regfile_p);
-
-    // Only execute when not stalling
     gen_forward(pregs_p, pwires_p);
     pregs_p->exmem_preg.inp = stage_execute(pregs_p->idex_preg.out, pwires_p);
   }
@@ -345,14 +333,6 @@ void cycle_pipeline(regfile_t* regfile_p, Byte* memory_p, Cache* cache_p, pipeli
 
     pwires_p->next_pc = 0;
   }
-
-  printf("[DEBUG UPDATE]: About to update pipeline registers\n");
-  printf("[DEBUG UPDATE]: IFID.inp: [%08x]@[%08x]\n",
-         pregs_p->ifid_preg.inp.instr.bits, pregs_p->ifid_preg.inp.instr_addr);
-  printf("[DEBUG UPDATE]: IDEX.inp: [%08x]@[%08x]\n",
-         pregs_p->idex_preg.inp.instr.bits, pregs_p->idex_preg.inp.instr_addr);
-  printf("[DEBUG UPDATE]: EXMEM.inp: [%08x]@[%08x]\n",
-         pregs_p->exmem_preg.inp.instr.bits, pregs_p->exmem_preg.inp.instr_addr);
 
   // Update pipeline registers
   pregs_p->ifid_preg.out = pregs_p->ifid_preg.inp;
