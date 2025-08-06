@@ -134,6 +134,16 @@ typedef struct
   uint32_t  pc_src0; // sequential PC + 4
   uint32_t  pc_src1; // Branch jump target pc
   uint32_t  next_pc; // store next pc
+  bool      stall; // stall signal for load-use hazards
+  // Forwarding control signals
+  bool      forward_a_ex; // forward from EX/MEM to EX for rs1
+  bool      forward_b_ex; // forward from EX/MEM to EX for rs2
+  uint32_t  forward_data_a_ex; // forwarding data for rs1 from EX
+  uint32_t  forward_data_b_ex; // forwarding data for rs2 from EX
+  bool      forward_a_mem; // forward from MEM/WB to EX for rs1
+  bool      forward_b_mem; // forward from MEM/WB to EX for rs2
+  uint32_t  forward_data_a_mem; // forwarding data for rs1 from MEM
+  uint32_t  forward_data_b_mem; // forwarding data for rs2 from MEM
 }pipeline_wires_t;
 
 

@@ -294,11 +294,11 @@ if (pwires_p->stall) {
   // Keep IFID the same (no new fetch)
   pregs_p->ifid_preg.inp = pregs_p->ifid_preg.out;
 
-  // Insert NOP into IDEX with the PREVIOUS instruction's address
+  // Insert NOP into IDEX with correct address (PC-8 from the stalled instruction)
   pregs_p->idex_preg.inp = (idex_reg_t){
     .instr = { .opcode = 0x13 },
     .instr.bits = 0x00000013,
-    .instr_addr = pregs_p->idex_preg.out.instr_addr  // Use the stalled instruction's address
+    .instr_addr = regfile_p->PC - 8  // Address of the instruction being repeated
   };
 } else {
   pregs_p->ifid_preg.inp = stage_fetch(pwires_p, regfile_p, memory_p);

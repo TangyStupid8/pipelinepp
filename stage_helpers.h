@@ -446,7 +446,7 @@ void detect_hazard(pipeline_regs_t* pregs_p, pipeline_wires_t* pwires_p, regfile
       ((uses_rs1 && idex->rd == ifid_rs1) || (uses_rs2 && idex->rd == ifid_rs2))) {
 
     stall_counter++;
-    printf("[HZD]: Stalling and rewriting PC: 0x%08x\n", regfile_p->PC - 4);
+    printf("[HZD]: Stalling and rewriting PC: 0x%08x\n", regfile_p->PC - 8);
     pwires_p->stall = true;
   } else {
     pwires_p->stall = false;
