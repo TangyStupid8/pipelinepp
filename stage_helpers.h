@@ -310,7 +310,7 @@ bool gen_branch(exmem_reg_t exmem_reg)
 {
   if (exmem_reg.instr.opcode != 0x63) return false; // Not a branch
 
-  // For branches, alu_result contains rs1_data and rs2_data contains rs2_data
+  // The values are stored in alu_result and rs2_data
   uint32_t rs1_data = exmem_reg.alu_result;
   uint32_t rs2_data = exmem_reg.rs2_data;
 
@@ -321,11 +321,11 @@ bool gen_branch(exmem_reg_t exmem_reg)
       return (rs1_data != rs2_data);
     case 0x4: // BLT less than
       return ((int32_t)rs1_data < (int32_t)rs2_data);
-    case 0x5: // BGE great than
+    case 0x5: // BGE greater than or equal
       return ((int32_t)rs1_data >= (int32_t)rs2_data);
-    case 0x6: // BLTU
+    case 0x6: // BLTU less than unsigned
       return (rs1_data < rs2_data);
-    case 0x7: // BGEU
+    case 0x7: // BGEU greater than or equal unsigned
       return (rs1_data >= rs2_data);
     default:
       return false;
@@ -339,24 +339,120 @@ bool gen_branch(exmem_reg_t exmem_reg)
  *           based on the pipeline register values.
  * input  : pipeline_regs_t*, pipeline_wires_t*
  * output : None
-*/
+ *
+ * */
 void gen_forward(pipeline_regs_t* pregs_p, pipeline_wires_t* pwires_p)
 {
-  // For milestone 1, no forwarding needed
-  // This will be implemented in milestone 2
+  // Initialize all forwarding signals
+  pwires_p->forward_a_ex = false;
+  pwires_p->forward_b_ex = false;
+  pwires_p->forward_data_a_ex = 0;
+  pwires_p->forward_data_b_ex = 0;
+  pwires_p->forward_a_mem = false;
+  pwires_p->forward_b_mem = false;
+  pwires_p->forward_data_a_mem = 0;
+  pwires_p->forward_data_b_mem = 0;
+
+  idex_reg_t* idex = &pregs_p->idex_preg.out;
+  exmem_reg_t* exmem = &pregs_p->exmem_preg.out;
+  memwb_reg_t* memwb = &pregs_p->memwb_preg.out;
+
+  // EX Hazard Detection (EX/MEM -> EX forwarding)
+  if (exmem->reg_write && exmem->rd != 0) {
+    // Forward to rs1
+    if (exmem->rd == idex->rs1) {
+      pwires_p->forward_a_ex = true;
+      pwires_p->forward_data_a_ex = exmem->alu_result;
+      printf("[FWD]: Resolving EX hazard on rs1: x%d\n", idex->rs1);
+      fwd_exex_counter++;
+    }
+
+    // Forward to rs2 (for R-type, branches, and stores)
+    if (exmem->rd == idex->rs2 && (!idex->alu_src || idex->mem_write)) {
+      pwires_p->forward_b_ex = true;
+      pwires_p->forward_data_b_ex = exmem->alu_result;
+      printf("[FWD]: Resolving EX hazard on rs2: x%d\n", idex->rs2);
+      fwd_exex_counter++;
+    }
+  }
+
+  // MEM Hazard Detection (MEM/WB -> EX forwarding)
+  // Only forward if EX hazard is not already handling it
+  if (memwb->reg_write && memwb->rd != 0) {
+    // Forward to rs1 if not already forwarded from EX
+    if (memwb->rd == idex->rs1 && !pwires_p->forward_a_ex) {
+      pwires_p->forward_a_mem = true;
+      pwires_p->forward_data_a_mem = memwb->mem_to_reg ? memwb->mem_data : memwb->alu_result;
+      printf("[FWD]: Resolving MEM hazard on rs1: x%d\n", idex->rs1);
+      fwd_exmem_counter++;
+    }
+
+    // Forward to rs2 if not already forwarded from EX
+    if (memwb->rd == idex->rs2 && !pwires_p->forward_b_ex && (!idex->alu_src || idex->mem_write)) {
+      pwires_p->forward_b_mem = true;
+      pwires_p->forward_data_b_mem = memwb->mem_to_reg ? memwb->mem_data : memwb->alu_result;
+      printf("[FWD]: Resolving MEM hazard on rs2: x%d\n", idex->rs2);
+      fwd_exmem_counter++;
+    }
+  }
 }
 
-/**
- * Task   : Sets the pipeline wires for the hazard unit's control signals
- *           based on the pipeline register values.
- * input  : pipeline_regs_t*, pipeline_wires_t*
- * output : None
-*/
 void detect_hazard(pipeline_regs_t* pregs_p, pipeline_wires_t* pwires_p, regfile_t* regfile_p)
 {
-  // For milestone 1, no hazard detection needed
-  // This will be implemented in milestone 2
+  idex_reg_t* idex = &pregs_p->idex_preg.out;
+  ifid_reg_t* ifid = &pregs_p->ifid_preg.out;
+
+  // Extract source registers from IFID instruction based on opcode
+  uint32_t ifid_rs1 = 0, ifid_rs2 = 0;
+  bool uses_rs1 = false, uses_rs2 = false;
+
+  switch(ifid->instr.opcode) {
+    case 0x33: // R-type
+      ifid_rs1 = ifid->instr.rtype.rs1;
+      ifid_rs2 = ifid->instr.rtype.rs2;
+      uses_rs1 = true;
+      uses_rs2 = true;
+      break;
+    case 0x13: // I-type (immediate)
+    case 0x03: // I-type (load)
+      ifid_rs1 = ifid->instr.itype.rs1;
+      uses_rs1 = true;
+      uses_rs2 = false;
+      break;
+    case 0x23: // S-type (store)
+      ifid_rs1 = ifid->instr.stype.rs1;
+      ifid_rs2 = ifid->instr.stype.rs2;
+      uses_rs1 = true;
+      uses_rs2 = true;
+      break;
+    case 0x63: // SB-type (branch)
+      ifid_rs1 = ifid->instr.sbtype.rs1;
+      ifid_rs2 = ifid->instr.sbtype.rs2;
+      uses_rs1 = true;
+      uses_rs2 = true;
+      break;
+    case 0x73: // ECALL
+      uses_rs1 = false;
+      uses_rs2 = false;
+      break;
+    default: // U-type, UJ-type, etc.
+      uses_rs1 = false;
+      uses_rs2 = false;
+      break;
+  }
+
+  // Load-use hazard detection
+  if (idex->mem_read && (idex->rd != 0) &&
+      ((uses_rs1 && idex->rd == ifid_rs1) || (uses_rs2 && idex->rd == ifid_rs2))) {
+
+    stall_counter++;
+    printf("[HZD]: Stalling and rewriting PC: 0x%08x\n", regfile_p->PC - 4);
+    pwires_p->stall = true;
+  } else {
+    pwires_p->stall = false;
+  }
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
