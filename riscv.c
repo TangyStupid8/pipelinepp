@@ -234,7 +234,6 @@ int main(int argc, char **argv) {
       cycle_pipeline(&regfile, memory, &cache, &pipeline_regs, &pipeline_wires, &ecall_exit);
       simins++;
     }
-/*
     #ifdef PRINT_STATS
     printf("#Cycles            = %5ld\n", total_cycle_counter);
     printf("#Forwards (EX-EX)  = %5ld\n", fwd_exex_counter);
@@ -252,7 +251,6 @@ int main(int argc, char **argv) {
       printf("#Cache hits        = %5ld\n", hit_count);
       printf("#Cache misses      = %5ld\n", miss_count);
     #endif
-*/
   }
 
   // print mem
