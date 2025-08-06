@@ -303,13 +303,21 @@ void cycle_pipeline(regfile_t* regfile_p, Byte* memory_p, Cache* cache_p, pipeli
       .instr.bits = 0x00000013,
       .instr_addr = pregs_p->ifid_preg.out.instr_addr
     };
+
+    // During stall, insert NOP into EXMEM
+    pregs_p->exmem_preg.inp = (exmem_reg_t){
+      .instr.bits = 0x00000013,
+      .instr_addr = regfile_p->PC - 8
+    };
   } else {
     pregs_p->ifid_preg.inp = stage_fetch(pwires_p, regfile_p, memory_p);
     pregs_p->idex_preg.inp = stage_decode(pregs_p->ifid_preg.out, pwires_p, regfile_p);
+
+    // Only execute when not stalling
+    gen_forward(pregs_p, pwires_p);
+    pregs_p->exmem_preg.inp = stage_execute(pregs_p->idex_preg.out, pwires_p);
   }
 
-  gen_forward(pregs_p, pwires_p);
-  pregs_p->exmem_preg.inp = stage_execute(pregs_p->idex_preg.out, pwires_p);
   pregs_p->memwb_preg.inp = stage_mem(pregs_p->exmem_preg.out, pwires_p, memory_p, cache_p);
   stage_writeback(pregs_p->memwb_preg.out, pwires_p, regfile_p);
 
