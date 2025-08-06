@@ -290,17 +290,20 @@ void cycle_pipeline(regfile_t* regfile_p, Byte* memory_p, Cache* cache_p, pipeli
   // Detect load-use hazards BEFORE fetch (using current pipeline state)
   detect_hazard(pregs_p, pwires_p, regfile_p);
 
-    if (pwires_p->stall) {
-    pregs_p->ifid_preg.inp = pregs_p->ifid_preg.out;
-    pregs_p->idex_preg.inp = (idex_reg_t){
-      .instr = { .opcode = 0x13 }, // addi
-      .instr.bits = 0x00000013,
-      .instr_addr = pregs_p->ifid_preg.out.instr_addr
-    };
-  } else {
-    pregs_p->ifid_preg.inp = stage_fetch(pwires_p, regfile_p, memory_p);
-    pregs_p->idex_preg.inp = stage_decode(pregs_p->ifid_preg.out, pwires_p, regfile_p);
-  }
+if (pwires_p->stall) {
+  // Keep IFID the same (no new fetch)
+  pregs_p->ifid_preg.inp = pregs_p->ifid_preg.out;
+
+  // Insert NOP into IDEX with the PREVIOUS instruction's address
+  pregs_p->idex_preg.inp = (idex_reg_t){
+    .instr = { .opcode = 0x13 },
+    .instr.bits = 0x00000013,
+    .instr_addr = pregs_p->idex_preg.out.instr_addr  // Use the stalled instruction's address
+  };
+} else {
+  pregs_p->ifid_preg.inp = stage_fetch(pwires_p, regfile_p, memory_p);
+  pregs_p->idex_preg.inp = stage_decode(pregs_p->ifid_preg.out, pwires_p, regfile_p);
+}
 
 
   gen_forward(pregs_p, pwires_p);
